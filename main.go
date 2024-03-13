@@ -54,7 +54,19 @@ func (s *simpleServer) Address() string {
 }
 
 func (s *simpleServer) IsAlive() bool {
-	return true
+	resp, err := http.Get(s.address)
+	if err != nil {
+		fmt.Printf("[Health Check] Server %s - Error: %s\n", s.address, err.Error())
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return true
+	}
+
+	fmt.Printf("[Health Check] Server %s - Status Code: %d\n", s.address, resp.StatusCode)
+	return false
 }
 
 func (s *simpleServer) Serve(rw http.ResponseWriter, req *http.Request) {
@@ -63,11 +75,14 @@ func (s *simpleServer) Serve(rw http.ResponseWriter, req *http.Request) {
 
 func (lb *LoadBalancer) getNextAvailableServer() Server {
 	server := lb.servers[lb.roundRobinCount%len(lb.servers)]
+	fmt.Printf("[Server Check] Checking server %s\n", server.Address())
 
 	for !server.IsAlive() {
+		fmt.Printf("[Server Check] Server %s is not alive\n", server.Address())
 		lb.roundRobinCount++
 		server = lb.servers[lb.roundRobinCount%len(lb.servers)]
 	}
+	fmt.Printf("[Server Check] Server %s is alive\n", server.Address())
 	lb.roundRobinCount++
 	return server
 }
@@ -75,7 +90,7 @@ func (lb *LoadBalancer) getNextAvailableServer() Server {
 func (lb *LoadBalancer) serveProxy(rw http.ResponseWriter, req *http.Request) {
 	lb.roundRobinCount++
 	server := lb.getNextAvailableServer()
-	fmt.Println("Forwarding request to", server.Address())
+	fmt.Printf("[Request Forwarding] Forwarding request to %s\n", server.Address())
 	if server != nil {
 		server.Serve(rw, req)
 		return
@@ -83,21 +98,48 @@ func (lb *LoadBalancer) serveProxy(rw http.ResponseWriter, req *http.Request) {
 	http.Error(rw, "Service not available", http.StatusServiceUnavailable)
 }
 
+// func (lb *LoadBalancer) displayServerHealthAndOrder() {
+// 	fmt.Println("[Server Health Status]")
+// 	for _, server := range lb.servers {
+// 		if server.IsAlive() {
+// 			fmt.Printf("Server %s is alive\n", server.Address())
+// 		} else {
+// 			fmt.Printf("Server %s is not alive\n", server.Address())
+// 		}
+// 	}
+
+// 	fmt.Println("\nList of available servers along with their healths:")
+// 	for i := 0; i < len(lb.servers); i++ {
+// 		fmt.Printf("%d. %s\n", i+1, lb.servers[(lb.roundRobinCount+i)%len(lb.servers)].Address())
+// 	}
+// }
+func (lb *LoadBalancer) displayServerHealthAndOrder() {
+	fmt.Println("[Server Health Status]")
+	for _, server := range lb.servers {
+		status := "not alive"
+		if server.IsAlive() {
+			status = "alive"
+		}
+		fmt.Printf("Server %s is %s\n", server.Address(), status)
+	}
+}
+
 func main() {
 	servers := []Server{
-		newSimpleServer("https://google.com"),
-		newSimpleServer("https://reddit.com"),
-		newSimpleServer("https://youtube.com"),
-		newSimpleServer("https://facebook.com"),
-		newSimpleServer("https://duckduckgo.com"),
+		newSimpleServer("https://example.com"),
+		newSimpleServer("https://jsonplaceholder.typicode.com"),
+		newSimpleServer("https://api.publicapis.org"),
+		newSimpleServer("https://dog.ceo/api/breeds/list/all"),
+		newSimpleServer("https://nonexistentwebsite123.com"), // Non-existent server
 	}
 
-	lb := NewLoadBalancer(":8080", servers)
+	lb := NewLoadBalancer(":8081", servers)
 	handleRedirect := func(rw http.ResponseWriter, req *http.Request) {
 		lb.serveProxy(rw, req)
 	}
 
 	http.HandleFunc("/", handleRedirect)
-	fmt.Println("Server started at port " + lb.port)
+	fmt.Printf("Server started at port %s\n", lb.port)
+	lb.displayServerHealthAndOrder()
 	http.ListenAndServe(lb.port, nil)
 }
