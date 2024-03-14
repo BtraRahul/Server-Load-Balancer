@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 type Server interface {
@@ -23,6 +26,7 @@ type LoadBalancer struct {
 	port            string
 	roundRobinCount int
 	servers         []Server
+	server          *http.Server
 }
 
 func NewLoadBalancer(port string, servers []Server) *LoadBalancer {
@@ -30,6 +34,7 @@ func NewLoadBalancer(port string, servers []Server) *LoadBalancer {
 		port:            port,
 		roundRobinCount: 0,
 		servers:         servers,
+		server:          &http.Server{Addr: port},
 	}
 }
 
@@ -98,29 +103,22 @@ func (lb *LoadBalancer) serveProxy(rw http.ResponseWriter, req *http.Request) {
 	http.Error(rw, "Service not available", http.StatusServiceUnavailable)
 }
 
-// func (lb *LoadBalancer) displayServerHealthAndOrder() {
-// 	fmt.Println("[Server Health Status]")
-// 	for _, server := range lb.servers {
-// 		if server.IsAlive() {
-// 			fmt.Printf("Server %s is alive\n", server.Address())
-// 		} else {
-// 			fmt.Printf("Server %s is not alive\n", server.Address())
-// 		}
-// 	}
+func (lb *LoadBalancer) start() {
+	http.HandleFunc("/", lb.serveProxy)
+	fmt.Println("Server started at port " + lb.port)
 
-// 	fmt.Println("\nList of available servers along with their healths:")
-// 	for i := 0; i < len(lb.servers); i++ {
-// 		fmt.Printf("%d. %s\n", i+1, lb.servers[(lb.roundRobinCount+i)%len(lb.servers)].Address())
-// 	}
-// }
-func (lb *LoadBalancer) displayServerHealthAndOrder() {
-	fmt.Println("[Server Health Status]")
-	for _, server := range lb.servers {
-		status := "not alive"
-		if server.IsAlive() {
-			status = "alive"
+	go func() {
+		if err := lb.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Println("Error starting server:", err)
+			os.Exit(1)
 		}
-		fmt.Printf("Server %s is %s\n", server.Address(), status)
+	}()
+}
+
+func (lb *LoadBalancer) stop() {
+	fmt.Println("Shutting down server...")
+	if err := lb.server.Shutdown(context.Background()); err != nil {
+		fmt.Println("Error shutting down server:", err)
 	}
 }
 
@@ -129,17 +127,17 @@ func main() {
 		newSimpleServer("https://example.com"),
 		newSimpleServer("https://jsonplaceholder.typicode.com"),
 		newSimpleServer("https://api.publicapis.org"),
+		newSimpleServer("https://github.com"),
 		newSimpleServer("https://dog.ceo/api/breeds/list/all"),
 		newSimpleServer("https://nonexistentwebsite123.com"), // Non-existent server
 	}
 
 	lb := NewLoadBalancer(":8081", servers)
-	handleRedirect := func(rw http.ResponseWriter, req *http.Request) {
-		lb.serveProxy(rw, req)
-	}
+	lb.start()
 
-	http.HandleFunc("/", handleRedirect)
-	fmt.Printf("Server started at port %s\n", lb.port)
-	lb.displayServerHealthAndOrder()
-	http.ListenAndServe(lb.port, nil)
+	// Listen for interrupt signal to gracefully shutdown
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	<-interrupt
+	lb.stop()
 }

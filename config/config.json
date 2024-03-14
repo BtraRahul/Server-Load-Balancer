@@ -1,7 +1,7 @@
 {
 	"env": "dev",
 	"port": 8000,
-	"numberOfServers": 3,
+	"numberOfServers": 15,
 	"randomServerOff": true,
 	"servers": [
 		{
