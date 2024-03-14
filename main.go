@@ -122,12 +122,24 @@ func (lb *LoadBalancer) stop() {
 	}
 }
 
+func (lb *LoadBalancer) displayServerHealthAndOrder() {
+	fmt.Println("[Server Health Status]")
+	for _, server := range lb.servers {
+		status := "not alive"
+		if server.IsAlive() {
+			status = "alive"
+		}
+		fmt.Printf("Server %s is %s\n", server.Address(), status)
+	}
+}
+
 func main() {
 	servers := []Server{
 		newSimpleServer("https://example.com"),
+		newSimpleServer("https://facebook.com"),
+		newSimpleServer("https://instagram.com"),
 		newSimpleServer("https://jsonplaceholder.typicode.com"),
 		newSimpleServer("https://api.publicapis.org"),
-		newSimpleServer("https://github.com"),
 		newSimpleServer("https://dog.ceo/api/breeds/list/all"),
 		newSimpleServer("https://nonexistentwebsite123.com"), // Non-existent server
 	}
