@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 type Server interface {
@@ -75,7 +76,10 @@ func (s *simpleServer) IsAlive() bool {
 }
 
 func (s *simpleServer) Serve(rw http.ResponseWriter, req *http.Request) {
+	start := time.Now()
 	s.proxy.ServeHTTP(rw, req)
+	elapsed := time.Since(start)
+	fmt.Printf("[Connection Time] Time taken to connect to %s: %s\n", s.address, elapsed)
 }
 
 func (lb *LoadBalancer) getNextAvailableServer() Server {
@@ -137,6 +141,7 @@ func main() {
 	servers := []Server{
 		newSimpleServer("https://example.com"),
 		newSimpleServer("https://facebook.com"),
+		// newSimpleServer("https://github.com"),
 		newSimpleServer("https://instagram.com"),
 		newSimpleServer("https://jsonplaceholder.typicode.com"),
 		newSimpleServer("https://api.publicapis.org"),
@@ -147,7 +152,6 @@ func main() {
 	lb := NewLoadBalancer(":8081", servers)
 	lb.start()
 
-	// Listen for interrupt signal to gracefully shutdown
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 	<-interrupt
