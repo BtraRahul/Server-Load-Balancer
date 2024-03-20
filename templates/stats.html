@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Stats</title>
+</head>
+<body>
+    <h1>Server Stats</h1>
+    <div id="stats"></div>
+
+    <script>
+        function fetchServerStats() {
+            fetch('http://localhost:8081/stats')
+                .then(response => response.json())
+                .then(data => {
+                    const statsDiv = document.getElementById('stats');
+                    statsDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                })
+                .catch(error => console.error('Error fetching server stats:', error));
+        }
+
+        // Fetch server stats initially
+        fetchServerStats();
+
+        // Refresh server stats every 3 seconds
+        setInterval(fetchServerStats, 3000);
+    </script>
+</body>
+</html>
